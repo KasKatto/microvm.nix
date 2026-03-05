@@ -7,6 +7,9 @@ let
   cfg = config.microvm;
   hostName = config.networking.hostName or "$HOSTNAME";
   kernelAtLeast = lib.versionAtLeast config.boot.kernelPackages.kernel.version;
+  
+  defaultRunnerUser = "microvm";
+  defaultRunnerGroup = "kvm";
 in
 {
   options.microvm = with lib; {
@@ -993,6 +996,26 @@ in
           SOPS_AGE_KEY = "/run/secrets/guest_microvm_age_key";
         }
       '';
+    };
+
+    runnerIdentity = mkOption {
+      type = types.submodule {
+        options = {
+          runnerUser = mkOption {
+            type = types.str;
+            description = "The user that runs the VM and owns its state files. Defaults to microvm user.";
+          };
+
+          runnerGroup = mkOption {
+            type = types.str;
+            description = "The group of the user that runs the VM. Defaults to kvm group.";
+          };
+        };
+      };
+      default = {
+        runnerUser = defaultRunnerUser;
+        runnerGroup = defaultRunnerGroup;
+      };
     };
   };
 

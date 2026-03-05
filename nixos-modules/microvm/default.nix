@@ -4,9 +4,7 @@ let
   microvm-lib = import ../../lib {
     inherit lib;
   };
-
 in
-
 {
   imports = [
     ./boot-disk.nix

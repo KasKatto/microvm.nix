@@ -4,8 +4,8 @@ let
   microvmCommand = import ../../pkgs/microvm-command.nix {
     inherit pkgs;
   };
-  user = "microvm";
-  group = "kvm";
+  defaultRunnerUser = "microvm";
+  defaultRunnerGroup = "kvm";
 in
 {
   imports = [ ./options.nix ];
@@ -29,9 +29,10 @@ in
       "vhost_net"
     ];
 
+    # microvm:kvm still owns the parent state dir
     system.activationScripts.microvm-host = ''
       mkdir -p ${stateDir}
-      chown ${user}:${group} ${stateDir}
+      chown ${defaultRunnerUser}:${defaultRunnerGroup} ${stateDir}
       chmod u+rwx,g+w ${stateDir}
     '';
 
@@ -39,18 +40,18 @@ in
       microvmCommand
     ];
 
-    users.users.${user} = {
+    users.users.${defaultRunnerUser} = {
       isSystemUser = true;
-      inherit group;
+      group = defaultRunnerGroup;
     };
 
     security.pam.loginLimits = [ {
-      domain = user;
+      domain = defaultRunnerUser;
       item = "memlock";
       type = "hard";
       value = "infinity";
     } {
-      domain = user;
+      domain = defaultRunnerUser;
       item = "memlock";
       type = "soft";
       value = "infinity";
@@ -67,6 +68,8 @@ in
                         then microvmConfig.evaluatedConfig.config
                         else microvmConfig.config.config;
         runner = guestConfig.microvm.declaredRunner;
+
+        inherit (guestConfig.microvm.runnerIdentity) runnerUser runnerGroup;
       in
     {
       "install-microvm-${name}" = {
@@ -84,13 +87,18 @@ in
         # Run on every rebuild for fully-declarative MicroVMs and flake-based MicroVMs without updateFlake.
         # For MicroVMs with updateFlake set, only run on initial installation.
         unitConfig.ConditionPathExists = lib.mkIf (isFlake && updateFlake != null) "!${stateDir}/${name}";
-        serviceConfig.Type = "oneshot";
+        serviceConfig = {
+          Type = "oneshot";
+          SyslogIdentifier = "install-microvm-${name}";
+          User = runnerUser;
+          Group = runnerGroup;
+        };
         script = ''
             mkdir -p ${stateDir}/${name}
             cd ${stateDir}/${name}
 
             ln -sTf ${runner} current
-            chown -h ${user}:${group} . current
+            chown -h ${runnerUser}:${runnerGroup} . current
           ''
           # Including the toplevel here is crucial to have the service definition
           # change when the host is rebuilt and the vm definition changed.
@@ -102,9 +110,14 @@ in
             echo '${if updateFlake != null
                     then updateFlake
                     else flake}' > flake
-            chown -h ${user}:${group} flake
+            chown -h ${runnerUser}:${runnerGroup} flake
           '';
-        serviceConfig.SyslogIdentifier = "install-microvm-${name}";
+      };
+      "microvm-set-booted@${name}" = {
+        serviceConfig = {
+          User = runnerUser;
+          Group = runnerGroup;
+        };
       };
       "microvm@${name}" = {
         # restartIfChanged is opt-out, so we have to include the definition unconditionally
@@ -116,10 +129,15 @@ in
         # we also have to include a trigger here.
         restartTriggers = [guestConfig.system.build.toplevel];
         overrideStrategy = "asDropin";
-        serviceConfig.Type =
-          if guestConfig.microvm.declaredRunner.supportsNotifySocket
-          then "notify"
-          else "simple";
+        serviceConfig = {
+          Type =
+            if guestConfig.microvm.declaredRunner.supportsNotifySocket
+            then "notify"
+            else "simple";
+          User = runnerUser;
+          Group = runnerGroup;
+        };
+          
       };
       "microvm-tap-interfaces@${name}" = {
         serviceConfig.X-RestartIfChanged = [ "" microvmConfig.restartIfChanged ];
@@ -215,8 +233,8 @@ in
           RemainAfterExit = true;
           SyslogIdentifier = "microvm-set-booted@%i";
           WorkingDirectory = "${stateDir}/%i";
-          User = user;
-          Group = group;
+          User = defaultRunnerUser;
+          Group = defaultRunnerGroup;
           ExecStop = "${lib.getExe' pkgs.coreutils "rm"} booted";
         };
         script = ''
@@ -255,8 +273,8 @@ in
           TimeoutSec = config.microvm.host.startupTimeout;
           Restart = "always";
           RestartSec = "5s";
-          User = user;
-          Group = group;
+          User = defaultRunnerUser;
+          Group = defaultRunnerGroup;
           SyslogIdentifier = "microvm@%i";
           LimitNOFILE = 1048576;
           NotifyAccess = "all";

@@ -13,9 +13,7 @@ let
     lib.optional config.microvm.declaredRunner.passthru.tapMultiQueue "multi_queue"
   );
 
-  # TODO: don't hardcode but obtain from host config
-  user = "microvm";
-  group = "kvm";
+  inherit (config.microvm.runnerIdentity) runnerUser runnerGroup;
 in
 {
   microvm.binScripts = lib.mkMerge [ (
@@ -27,7 +25,7 @@ in
           ${lib.getExe' pkgs.iproute2 "ip"} link delete '${id}'
         fi
 
-        ${lib.getExe' pkgs.iproute2 "ip"} tuntap add name '${id}' mode tap user '${user}' ${tapFlags}
+        ${lib.getExe' pkgs.iproute2 "ip"} tuntap add name '${id}' mode tap user '${runnerUser}' ${tapFlags}
         ${lib.getExe' pkgs.iproute2 "ip"} link set '${id}' up
       '') tapInterfaces;
 
@@ -51,7 +49,7 @@ in
           echo 1 > "/proc/sys/net/ipv6/conf/${id}/disable_ipv6"
         fi
         ${lib.getExe' pkgs.iproute2 "ip"} link set '${id}' up
-        ${pkgs.coreutils-full}/bin/chown '${user}:${group}' /dev/tap$(< "/sys/class/net/${id}/ifindex")
+        ${pkgs.coreutils-full}/bin/chown '${runnerUser}:${runnerGroup}' /dev/tap$(< "/sys/class/net/${id}/ifindex")
       '') macvtapInterfaces;
 
       macvtap-down = ''

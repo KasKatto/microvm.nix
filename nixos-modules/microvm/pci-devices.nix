@@ -1,14 +1,10 @@
 { config, lib, pkgs, ... }:
-
 let
   pciDevices = builtins.filter ({ bus, ... }:
     bus == "pci"
   ) config.microvm.devices;
 
-  # TODO: don't hardcode but obtain from host config
-  user = "microvm";
-  group = "kvm";
-
+  inherit (config.microvm.runnerIdentity) runnerUser runnerGroup;
 in
 {
   microvm.binScripts.pci-setup = lib.mkIf (pciDevices != []) (''
@@ -32,6 +28,7 @@ in
     [[ -e iommu_group ]] || exit 1
     VFIO_DEV=$(basename $(readlink iommu_group))
     echo "Making VFIO device $VFIO_DEV accessible for user"
-    chown ${user}:${group} /dev/vfio/$VFIO_DEV
+    chown ${runnerUser}:${runnerGroup} /dev/vfio/$VFIO_DEV
   '') pciDevices);
 }
+
