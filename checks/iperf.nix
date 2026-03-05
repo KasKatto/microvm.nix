@@ -37,7 +37,7 @@ nixpkgs.lib.optionalAttrs (builtins.elem hypervisor self.lib.hypervisorsWithNetw
         };
       } "touch $out";
       environment.systemPackages = with pkgs; [ #with nixpkgs.legacyPackages.${system}; [
-        iperf iproute
+        iperf iproute2
       ];
       virtualisation = {
         # larger than the defaults
