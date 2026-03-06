@@ -11,14 +11,24 @@ in
   imports = [ ./options.nix ];
 
   config = lib.mkIf config.microvm.host.enable {
-    assertions = lib.concatMap (vmName: [
+    assertions = lib.concatMap (vmName: let
+        declarativeConfig = config.microvm.vms.${vmName}.config;
+      in [
       {
-        assertion = config.microvm.vms.${vmName}.config != null -> config.microvm.vms.${vmName}.flake == null;
+        assertion = declarativeConfig != null -> config.microvm.vms.${vmName}.flake == null;
         message = "vm ${vmName}: Fully-declarative VMs cannot also set a flake!";
       }
       {
-        assertion = config.microvm.vms.${vmName}.config != null -> config.microvm.vms.${vmName}.updateFlake == null;
+        assertion = declarativeConfig != null -> config.microvm.vms.${vmName}.updateFlake == null;
         message = "vm ${vmName}: Fully-declarative VMs cannot set a updateFlake!";
+      }
+      {
+        assertion =
+          declarativeConfig != null ->
+            (builtins.hasAttr declarativeConfig.config.microvm.runnerIdentity.runnerUser config.users.users
+            && builtins.hasAttr declarativeConfig.config.microvm.runnerIdentity.runnerGroup config.users.groups);
+
+        message = "User or Group for ${vmName} does not exist in the host config under users.users!";
       }
     ]) (builtins.attrNames config.microvm.vms);
 
@@ -90,11 +100,10 @@ in
         serviceConfig = {
           Type = "oneshot";
           SyslogIdentifier = "install-microvm-${name}";
-          User = runnerUser;
-          Group = runnerGroup;
         };
         script = ''
             mkdir -p ${stateDir}/${name}
+            chown ${runnerUser}:${runnerGroup} ${stateDir}/${name}
             cd ${stateDir}/${name}
 
             ln -sTf ${runner} current
@@ -114,6 +123,7 @@ in
           '';
       };
       "microvm-set-booted@${name}" = {
+        overrideStrategy = "asDropin";
         serviceConfig = {
           User = runnerUser;
           Group = runnerGroup;
