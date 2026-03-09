@@ -39,11 +39,10 @@ in
       "vhost_net"
     ];
 
-    # microvm:kvm still owns the parent state dir
+    # root should own the parent dir for simplicity, the individual vm dirs will either be owned by microvm or custom users. systemd-tmpfiles else raises "unsafe path transition" error
     system.activationScripts.microvm-host = ''
       mkdir -p ${stateDir}
-      chown ${defaultRunnerUser}:${defaultRunnerGroup} ${stateDir}
-      chmod u+rwx,g+w ${stateDir}
+      chown root:root ${stateDir}
     '';
 
     environment.systemPackages = [
