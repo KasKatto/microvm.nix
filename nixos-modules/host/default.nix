@@ -46,8 +46,8 @@ in
 
     # root should own the parent dir for simplicity, the individual vm dirs will either be owned by microvm or custom users. systemd-tmpfiles else raises "unsafe path transition" error
     systemd.tmpfiles.settings."10-microvm"."${stateDir}".d = {
-      user = user;
-      group = group;
+      user = "root";
+      group = "root";
       mode = "0775";
     };
 

@@ -1045,22 +1045,16 @@ in
       '';
     };
 
-    runnerIdentity = mkOption {
-      type = types.submodule {
-        options = {
-          runnerUser = mkOption {
-            type = types.str;
-            default = defaultRunnerUser;
-            description = "The user that runs the VM and owns its state files. Defaults to microvm user.";
-          };
+    runnerIdentity.runnerUser = mkOption {
+      type = types.str;
+      default = defaultRunnerUser;
+      description = "The user that runs the VM and owns its state files. Defaults to microvm user.";
+    };
 
-          runnerGroup = mkOption {
-            type = types.str;
-            default = defaultRunnerGroup;
-            description = "The group of the user that runs the VM. Defaults to kvm group.";
-          };
-        };
-      };
+    runnerIdentity.runnerGroup = mkOption {
+      type = types.str;
+      default = defaultRunnerGroup;
+      description = "The group of the user that runs the VM. Defaults to kvm group.";
     };
   };
 
