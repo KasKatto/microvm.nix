@@ -1,6 +1,11 @@
-{ pkgs }:
-
-with pkgs;
+{ lib
+, git
+, jq
+, nix
+, openssh
+, writeShellScriptBin
+, stateDir ? "/var/lib/microvms"
+}:
 
 let
   colors = {
@@ -18,9 +23,9 @@ writeShellScriptBin "microvm" ''
   set -e
 
   PATH=${lib.makeBinPath [
-    git jq nix
+    git jq nix openssh
   ]}:$PATH
-  STATE_DIR=/var/lib/microvms
+  STATE_DIR=${stateDir}
   ACTION=help
   FLAKE=git+file:///etc/nixos
   RESTART=n
@@ -40,6 +45,11 @@ writeShellScriptBin "microvm" ''
 
       r)
         ACTION=run
+        NAME=$OPTARG
+        ;;
+
+      s)
+        ACTION=ssh
         NAME=$OPTARG
         ;;
 
@@ -88,6 +98,7 @@ writeShellScriptBin "microvm" ''
           -c <name>   Create a MicroVM
           -u <names>  Rebuild (update) MicroVMs
           -r <name>   Run a MicroVM in foreground
+          -s <name>   SSH into a MicroVM via VSOCK
           -l          List MicroVMs
 
   Flags:
@@ -194,6 +205,75 @@ writeShellScriptBin "microvm" ''
           fi
         fi
       done
+      ;;
+
+    ssh)
+      if [ ! -d "$DIR" ]; then
+        echo -e "${colored "red" "MicroVM $NAME not found"}"
+        exit 1
+      fi
+
+      # Check if VM is running
+      if ! systemctl is-active -q "microvm@$NAME" ; then
+        echo -e "${colored "red" "MicroVM $NAME is not running"}"
+        exit 1
+      fi
+
+      # Get hypervisor type and VSOCK info
+      HYPERVISOR=""
+      if [ -f "$DIR/current/share/microvm/hypervisor" ]; then
+        HYPERVISOR=$(cat "$DIR/current/share/microvm/hypervisor")
+      fi
+
+      VSOCK_CID=""
+      if [ -f "$DIR/current/share/microvm/vsock-cid" ]; then
+        VSOCK_CID=$(cat "$DIR/current/share/microvm/vsock-cid")
+      fi
+
+      if [ -z "$VSOCK_CID" ]; then
+        echo -e "${colored "red" "MicroVM $NAME does not have VSOCK enabled"}"
+        echo "Set microvm.vsock.cid in the VM configuration"
+        exit 1
+      fi
+
+      # Determine SSH target based on hypervisor
+      # cloud-hypervisor uses a Unix socket multiplexer
+      # qemu/crosvm/kvmtool use native AF_VSOCK
+      case "$HYPERVISOR" in
+        cloud-hypervisor)
+          # cloud-hypervisor uses notify.vsock in the working directory
+          SSH_TARGET="vsock-mux/$DIR/notify.vsock"
+          ;;
+        *)
+          # qemu, crosvm, kvmtool use native AF_VSOCK with CID
+          SSH_TARGET="vsock/$VSOCK_CID"
+          ;;
+      esac
+
+      SSH_EXTRA_OPTS=()
+      SSH_REMOTE_CMD=()
+      if [ "$#" -gt 0 ] && [ "$1" = "--" ]; then
+        shift
+        SSH_EXTRA_OPTS=("$@")
+      else
+        SSH_REMOTE_CMD=("$@")
+      fi
+
+      HAS_LOGIN_OPT=false
+      for opt in "''${SSH_REMOTE_CMD[@]}"; do
+        case "$opt" in
+          -l|--login)
+            HAS_LOGIN_OPT=true
+            break
+          ;;
+        esac
+      done
+      if [ "$HAS_LOGIN_OPT" = false ]; then
+        SSH_REMOTE_CMD=("-l" "root" "''${SSH_REMOTE_CMD[@]}")
+      fi
+
+      echo -e "${colored "boldCyan" "Connecting to $NAME via VSOCK..."}"
+      exec ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "''${SSH_EXTRA_OPTS[@]}" "$SSH_TARGET" "''${SSH_REMOTE_CMD[@]}"
       ;;
   esac
 ''

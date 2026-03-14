@@ -5,7 +5,7 @@
   <a href="https://microvm-nix.github.io/microvm.nix/">HTML</a>
   <a href="doc/src/SUMMARY.md">Markdown</a>
   •
-  <strong><a href="https://matrix.to/#/#microvm.nix:envs.net">Matrix chat</a></strong>
+  <strong><a href="https://matrix.to/#/#microvm:nixos.org">Matrix chat</a></strong>
   •
   <strong><a href="./CHANGELOG.md">Changelog</a></strong>
 </p>

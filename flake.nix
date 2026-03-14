@@ -85,9 +85,7 @@
         in {
           build-microvm = pkgs.callPackage ./pkgs/build-microvm.nix { inherit self; };
           doc = pkgs.callPackage ./pkgs/doc.nix { };
-          microvm = import ./pkgs/microvm-command.nix {
-            pkgs = import nixpkgs { inherit system; };
-          };
+          microvm = pkgs.callPackage ./pkgs/microvm-command.nix { };
           # all compilation-heavy packages that shall be prebuilt for a binary cache
           prebuilt = pkgs.buildEnv {
             name = "prebuilt";
@@ -128,7 +126,7 @@
 
       # Takes too much memory in `nix flake show`
       # checks = forAllSystems (system:
-      #   import ./checks { inherit self nixpkgs system; };
+      #   import ./checks { inherit self nixpkgs system; }
       # );
 
       # hydraJobs are checks

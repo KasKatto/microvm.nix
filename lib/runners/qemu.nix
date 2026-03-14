@@ -37,9 +37,8 @@ let
     then "io_uring"
     else "threads";
 
-  inherit (microvmConfig) hostName vcpu mem balloon initialBalloonMem deflateOnOOM hotplugMem hotpluggedMem user interfaces shares socket forwardPorts devices vsock graphics storeOnDisk kernel initrdPath storeDisk credentialFiles;
+  inherit (microvmConfig) hostName machineId vcpu mem balloon initialBalloonMem deflateOnOOM hotplugMem hotpluggedMem user interfaces shares socket forwardPorts devices vsock graphics storeOnDisk kernel initrdPath storeDisk credentialFiles;
   inherit (microvmConfig.qemu) machine extraArgs serialConsole pcieRootPorts;
-
 
   volumes = withDriveLetters microvmConfig;
 
@@ -182,6 +181,8 @@ lib.warnIf (mem == 2048) ''
 
       "-chardev" "stdio,id=stdio,signal=off"
       "-device" "virtio-rng-${devType}"
+    ] ++ lib.optionals (machineId != null) [
+      "-smbios" "type=1,uuid=${machineId}"
     ] ++
       # Create PCIe root ports before vfio-pci devices that might require them
       builtins.concatMap ({ id, bus, chassis, slot, addr, ... }:
@@ -351,6 +352,11 @@ lib.warnIf (mem == 2048) ''
     if socket != null
     then
       ''
+        # Exit gracefully if QEMU is already gone (e.g., killed by machinectl)
+        if [ ! -S ${socket} ]; then
+          exit 0
+        fi
+
         (
           ${writeQmp { execute = "qmp_capabilities"; }}
           ${writeQmp {

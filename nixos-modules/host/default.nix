@@ -1,8 +1,13 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 let
   inherit (config.microvm) stateDir;
-  microvmCommand = import ../../pkgs/microvm-command.nix {
-    inherit pkgs;
+  microvmCommand = pkgs.callPackage ../../pkgs/microvm-command.nix {
+    inherit stateDir;
   };
   defaultRunnerUser = "microvm";
   defaultRunnerGroup = "kvm";
@@ -40,10 +45,11 @@ in
     ];
 
     # root should own the parent dir for simplicity, the individual vm dirs will either be owned by microvm or custom users. systemd-tmpfiles else raises "unsafe path transition" error
-    system.activationScripts.microvm-host = ''
-      mkdir -p ${stateDir}
-      chown root:root ${stateDir}
-    '';
+    systemd.tmpfiles.settings."10-microvm"."${stateDir}".d = {
+      user = user;
+      group = group;
+      mode = "0775";
+    };
 
     environment.systemPackages = [
       microvmCommand
@@ -147,6 +153,13 @@ in
           Group = runnerGroup;
         };
           
+        # Register with systemd-machined if the VM opts in
+        wants = lib.optionals runner.registerWithMachined [
+          "systemd-machined.service"
+        ];
+        after = lib.optionals runner.registerWithMachined [
+          "systemd-machined.service"
+        ];
       };
       "microvm-tap-interfaces@${name}" = {
         serviceConfig.X-RestartIfChanged = [ "" microvmConfig.restartIfChanged ];
@@ -263,6 +276,7 @@ in
         ];
         after = [
           "network.target"
+          "systemd-modules-load.service"
           "microvm-tap-interfaces@%i.service"
           "microvm-macvtap-interfaces@%i.service"
           "microvm-pci-devices@%i.service"
@@ -279,6 +293,12 @@ in
           WorkingDirectory = "${stateDir}/%i";
           ExecStart = "${stateDir}/%i/current/bin/microvm-run";
           ExecStop = "${stateDir}/%i/booted/bin/microvm-shutdown";
+          ExecStartPost = [
+            "+${pkgs.runtimeShell} -c 'if [ -x ${stateDir}/%i/current/bin/microvm-register ]; then ${stateDir}/%i/current/bin/microvm-register $MAINPID; fi'"
+          ];
+          ExecStopPost = [
+            "+${pkgs.runtimeShell} -c 'if [ -x ${stateDir}/%i/current/bin/microvm-unregister ]; then ${stateDir}/%i/current/bin/microvm-unregister; fi'"
+          ];
           TimeoutSec = config.microvm.host.startupTimeout;
           Restart = "always";
           RestartSec = "5s";

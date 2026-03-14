@@ -17,17 +17,7 @@ Let us know if you know more!
 
 That is possible without even requiring a network transport by just
 making the journals available to the host as a share. Because journald
-identifies hosts by their `/etc/machine-id`, we propose to use static
-content for that file. Add a NixOS module like the following to your
-MicroVM configuration:
-
-```nix
-environment.etc."machine-id" = {
-  mode = "0644";
-  text =
-    # change this to suit your flake's interface
-    self.lib.addresses.machineId.${config.networking.hostName} + "\n";
-};
+identifies hosts by their `/etc/machine-id`, the `microvm.machineId` should be set.
 
 microvm.shares = [ {
   # On the host
