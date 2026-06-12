@@ -64,8 +64,8 @@
       text = lib.replaceString "-" "" config.microvm.machineId + "\n";
     };
     # Generate hostId from machine-id like systemd would do
-    networking.hostId = lib.mkDefault (
+    networking.hostId = lib.mkIf (config.microvm.machineId != null) (lib.mkDefault (
       builtins.substring 0 8 config.microvm.machineId
-    );
+    ));
   };
 }

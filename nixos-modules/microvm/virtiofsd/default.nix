@@ -16,7 +16,10 @@ in
     virtiofsd-run =
       let
         supervisordConfig = {
-          supervisord.nodaemon = true;
+          supervisord = {
+            nodaemon = true;
+            user = "root";
+          };
 
           "eventlistener:notify" = {
             command = pkgs.writers.writePython3 "supervisord-event-handler" { } (
@@ -28,7 +31,7 @@ in
             events = "PROCESS_STATE";
           };
         } // builtins.listToAttrs (
-          map ({ tag, socket, source, readOnly, ... }: {
+          map ({ tag, socket, source, readOnly, cache, ... }: {
             name = "program:virtiofsd-${tag}";
             value = {
               stderr_syslog = true;
@@ -48,6 +51,7 @@ in
                   $OPT_RLIMIT \
                   --thread-pool-size ${toString config.microvm.virtiofsd.threadPoolSize} \
                   --posix-acl --xattr \
+                  --cache=${cache} \
                   ${lib.optionalString (config.microvm.virtiofsd.inodeFileHandles != null)
                     "--inode-file-handles=${config.microvm.virtiofsd.inodeFileHandles}"
                   } \
@@ -67,7 +71,7 @@ in
           );
 
       in ''
-        exec ${supervisord} --configuration ${supervisordConfigFile}
+        exec ${supervisord} --configuration ${supervisordConfigFile} "$@"
       '';
   };
 }

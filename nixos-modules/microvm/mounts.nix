@@ -59,6 +59,7 @@ lib.mkIf config.microvm.guest.enable {
     ) {
       "/nix/store" = {
         device = hostStore.mountPoint;
+        fsType = hostStore.proto;
         options = [ "ro" "bind" ];
         neededForBoot = true;
       };

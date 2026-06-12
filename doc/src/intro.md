@@ -49,3 +49,6 @@ other Hypervisors that have been explicitly authored for
 *virtio*. Some of them are written in Rust, a programming language
 that is renowned for being safer than C. On macOS, vfkit leverages
 Apple's native Virtualization.framework for running Linux VMs.
+Note that building the guest still requires access to a Linux builder; see
+[the FAQ](./faq.md#im-on-macos-and-builds-fail-with-required-system-aarch64-linux-what-do-i-do)
+for setup options.

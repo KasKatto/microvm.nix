@@ -14,9 +14,9 @@ let
     configureFlags = oa.configureFlags ++ [
       "--enable-libusb"
     ];
-    buildInputs = oa.buildInputs ++ (with pkgs; [
-      libusb1
-    ]);
+    buildInputs = oa.buildInputs ++ [
+      vmHostPackages.libusb1
+    ];
   });
 
   minimizeQemuClosureSize = pkg: pkg.override (oa: {
@@ -76,26 +76,31 @@ let
   machineOpts =
     if microvmConfig.qemu.machineOpts != null
     then microvmConfig.qemu.machineOpts
-    else {
-      x86_64-linux = {
-        inherit accel;
-        mem-merge = "on";
-        acpi = "on";
-      } // lib.optionalAttrs (machine == "microvm") {
-        pit = "off";
-        pic = "off";
-        pcie = if requirePci then "on" else "off";
-        rtc = "on";
-        usb = if requireUsb then "on" else "off";
-      };
-      aarch64-linux = {
-        inherit accel;
-        gic-version = "max";
-      };
-      aarch64-darwin = {
-        inherit accel;
-      };
-    }.${system};
+    else
+      let
+        x86MachineOpts = {
+          inherit accel;
+          mem-merge = "on";
+          acpi = "on";
+        } // lib.optionalAttrs (machine == "microvm") {
+          pit = "off";
+          pic = "off";
+          pcie = if requirePci then "on" else "off";
+          rtc = "on";
+          usb = if requireUsb then "on" else "off";
+        };
+      in
+      {
+        x86_64-linux = x86MachineOpts;
+        x86_64-darwin = x86MachineOpts;
+        aarch64-linux = {
+          inherit accel;
+          gic-version = "max";
+        };
+        aarch64-darwin = {
+          inherit accel;
+        };
+      }.${system};
 
   machineConfig = builtins.concatStringsSep "," (
     [ machine ] ++
@@ -127,11 +132,13 @@ let
 
   tapMultiQueue = vcpu > 1;
 
+  useHotPlugMemory = hotplugMem > 0;
+
   forwardingOptions = lib.concatMapStrings ({ proto, from, host, guest }: {
     host = "hostfwd=${proto}:${host.address}:${toString host.port}-" +
            "${guest.address}:${toString guest.port},";
     guest = "guestfwd=${proto}:${guest.address}:${toString guest.port}-" +
-            "cmd:${pkgs.netcat}/bin/nc ${host.address} ${toString host.port},";
+            "cmd:${vmHostPackages.netcat}/bin/nc ${host.address} ${toString host.port},";
   }.${from}) forwardPorts;
 
   writeQmp = data: ''
@@ -160,17 +167,15 @@ lib.warnIf (mem == 2048) ''
   inherit tapMultiQueue;
 
   command = if initialBalloonMem != 0
-  then throw "qemu does not support initialBalloonMem"
-  else if hotplugMem != 0
-  then throw "qemu does not support hotplugMem"
-  else if hotpluggedMem != 0
-  then throw "qemu does not support hotpluggedMem"
+  then throw "QEMU does not support initialBalloonMem"
+  else if (useHotPlugMemory && machine == "microvm")
+  then throw "QEMU's microvm machine type does not support virtio-mem"
   else lib.escapeShellArgs (
     [
       "${qemu}/bin/qemu-system-${arch}"
       "-name" hostName
       "-M" machineConfig
-      "-m" (toString mem)
+      "-m" "${toString mem}M${lib.optionalString useHotPlugMemory ",maxmem=${toString (mem + hotplugMem)}M"}"
       "-smp" (toString vcpu)
       "-nodefaults" "-no-user-config"
       # qemu just hangs after shutdown, allow to exit by rebooting
@@ -251,10 +256,14 @@ lib.warnIf (mem == 2048) ''
     lib.optionals canSandbox [
       "-sandbox" "on"
     ] ++
-    lib.optionals (user != null) [ "-user" user ] ++
+    lib.optionals (user != null) [ "-run-with" "user=${user}" ] ++
     lib.optionals (socket != null) [ "-qmp" "unix:${socket},server,nowait" ] ++
     lib.optionals balloon [
 	    "-device" ("virtio-balloon,free-page-reporting=on,id=balloon0" + lib.optionalString (deflateOnOOM) ",deflate-on-oom=on")
+    ] ++
+    lib.optionals useHotPlugMemory [
+      "-object" "memory-backend-ram,id=vmem0,size=${toString hotplugMem}M"
+      "-device" "virtio-mem-pci,id=vm0,memdev=vmem0,requested-size=${toString hotpluggedMem}M"
     ] ++
     builtins.concatMap ({ image, letter, serial, direct, readOnly, ... }:
       [ "-drive"

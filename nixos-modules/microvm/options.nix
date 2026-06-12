@@ -413,6 +413,11 @@ in
             description = "Turn off write access";
             default = false;
           };
+          cache = mkOption {
+            type = enum [ "auto" "always" "metadata" "never" ];
+            description = "Virtiofs caching policy for the file system, ignored when 9p is used";
+            default = "auto";
+          };
         };
       }));
     };
@@ -587,6 +592,13 @@ in
 
           The display backend is chosen by `microvm.graphics.backend`.
         '';
+      };
+
+      crosvmPackage = mkOption {
+        description = "crosvm package to use when running graphics (for cloud-hypervisor and crosvm)";
+        default = pkgs.crosvm;
+        defaultText = literalExpression ''"''${pkgs.crosvm}"'';
+        type = types.package;
       };
 
       backend = mkOption {
@@ -1064,12 +1076,12 @@ in
 
   config = lib.mkMerge [ {
     microvm.qemu.machine =
-      lib.mkIf (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (
+      lib.mkIf (lib.elem pkgs.stdenv.hostPlatform.system [ "x86_64-linux" "x86_64-darwin" ]) (
         lib.mkDefault "microvm"
       );
   } {
     microvm.qemu.machine =
-      lib.mkIf (pkgs.stdenv.hostPlatform.system == "aarch64-linux") (
+      lib.mkIf (lib.elem pkgs.stdenv.hostPlatform.system [ "aarch64-linux" "aarch64-darwin" ]) (
         lib.mkDefault "virt"
       );
   } ];
